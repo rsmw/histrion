@@ -33,6 +33,6 @@ fn example_script() {
     };
 
     let mut workspace = Workspace::new();
-    workspace.perform(&script);
-    workspace.simulate();
+    workspace.perform(&script).unwrap();
+    workspace.simulate().unwrap();
 }

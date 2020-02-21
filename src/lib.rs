@@ -59,6 +59,15 @@ pub struct CreationDate(Instant);
 #[storage(VecStorage)]
 pub struct Name(Arc<str>);
 
+#[derive(Clone, Debug)]
+pub enum Error {
+    NoSuchGlobal { name: Arc<str>, },
+    MissingPosition { name: Arc<str>, },
+    CouldNotWrite { name: Arc<str>, },
+}
+
+pub type Result<T, E=Error> = std::result::Result<T, E>;
+
 impl Workspace {
     pub fn new() -> Self {
         let mut world = World::new();
@@ -79,17 +88,19 @@ impl Workspace {
         }
     }
 
-    pub fn simulate(&mut self) {
+    pub fn simulate(&mut self) -> Result<()> {
         while !self.has_halted {
-            self.update();
+            self.update()?;
         }
+
+        Ok(())
     }
 
     pub fn has_halted(&self) -> bool {
         self.has_halted
     }
 
-    pub fn perform(&mut self, action: &Action) {
+    pub fn perform(&mut self, action: &Action) -> Result<()> {
         eprintln!("{:<8.0}: {}", f64::from(self.now), action.kind());
 
         match action {
@@ -97,7 +108,7 @@ impl Workspace {
 
             Action::Block { body } => {
                 for action in body.iter() {
-                    self.perform(action);
+                    self.perform(action)?;
                 }
             },
 
@@ -113,8 +124,9 @@ impl Workspace {
             },
 
             Action::SetTrajectory { name, value } => {
+                let name = name.clone();
                 let &id = self.globals.get(name.as_ref())
-                    .unwrap_or_else(|| panic!("No such name {}", name));
+                    .ok_or_else(|| Error::NoSuchGlobal { name: name.clone() })?;
 
                 let pos_fn = match value.as_ref() {
                     &TrajectoryExpr::Fixed { value } => {
@@ -125,14 +137,14 @@ impl Workspace {
                     &TrajectoryExpr::Linear { velocity } => {
                         let start_time = self.now;
                         let &start_place = self.world.read_component::<Position>()
-                            .get(id).unwrap_or_else(|| panic!("No position for {}", name));
+                            .get(id).ok_or(Error::MissingPosition { name: name.clone() })?;
                         Trajectory::Linear { velocity, start_place, start_time }
                     },
                 };
 
                 self.world.write_component::<Trajectory>()
                     .insert(id, pos_fn)
-                    .unwrap_or_else(|_err| panic!("Can't write pos fn for {}", name));
+                    .map_err(|_err| Error::CouldNotWrite { name: name.clone() })?;
             },
 
             Action::CreateTask { wait_for, and_then } => {
@@ -177,7 +189,7 @@ impl Workspace {
             Action::Fulfill { flag } => {
                 let ready = match self.flag_map.get_mut(&flag) {
                     Some(ready) => ready,
-                    _ => return,
+                    _ => return Ok(()),
                 };
 
                 for Waiting { action, counter } in ready.drain(..) {
@@ -191,9 +203,11 @@ impl Workspace {
 
             //_ => eprintln!("Not yet implemented: {:?}", action),
         }
+
+        Ok(())
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self) -> Result<()> {
         let (time, action) = self.task_queue.pop()
             .map(|Reverse(task)| task.into())
             .unwrap_or_else(|| (self.now + Interval::one(), Action::Halt));
@@ -201,7 +215,7 @@ impl Workspace {
         assert!(time >= self.now, "Time went backwards");
         self.now = time;
         self.update_positions();
-        self.perform(&action);
+        self.perform(&action)
     }
 
     fn update_positions(&mut self) {
