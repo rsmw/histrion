@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use ordered_float::NotNan;
 use vek::*;
@@ -10,21 +10,21 @@ pub enum Action {
     Halt,
 
     CreateActor {
-        name: Rc<str>,
+        name: Arc<str>,
     },
 
     CreateTask {
-        wait_for: Rc<WaitExpr>,
-        and_then: Rc<Action>,
+        wait_for: Arc<WaitExpr>,
+        and_then: Arc<Action>,
     },
 
     Block {
-        body: Rc<[Action]>,
+        body: Arc<[Action]>,
     },
 
     SetTrajectory {
-        name: Rc<str>,
-        value: Rc<TrajectoryExpr>,
+        name: Arc<str>,
+        value: Arc<TrajectoryExpr>,
     },
 
     Fulfill {
@@ -35,12 +35,12 @@ pub enum Action {
 #[derive(Clone, Debug)]
 pub enum Expr {
     Var {
-        name: Rc<str>,
+        name: Arc<str>,
     },
 
     Field {
-        object: Rc<Expr>,
-        name: Rc<str>,
+        object: Arc<Expr>,
+        name: Arc<str>,
     },
 
     Constant {
@@ -67,8 +67,8 @@ pub enum WaitExpr {
     },
 
     Flag {
-        head: Rc<str>,
-        args: Rc<[ArgExpr]>,
+        head: Arc<str>,
+        args: Arc<[ArgExpr]>,
     },
 }
 
@@ -79,14 +79,14 @@ pub enum ArgExpr {
     },
 
     ActorName {
-        name: Rc<str>,
+        name: Arc<str>,
     },
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Flag {
-    pub head: Rc<str>,
-    pub body: Rc<[Scalar]>,
+    pub head: Arc<str>,
+    pub body: Arc<[Scalar]>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -103,7 +103,7 @@ pub enum Unit {
 }
 
 impl WaitExpr {
-    pub fn and_then(self, and_then: impl Into<Rc<Action>>) -> Action {
+    pub fn and_then(self, and_then: impl Into<Arc<Action>>) -> Action {
         let wait_for = self.into();
         let and_then = and_then.into();
         Action::CreateTask {

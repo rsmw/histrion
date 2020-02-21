@@ -4,7 +4,7 @@ pub mod task;
 
 use std::cmp::Reverse;
 use std::collections::{HashMap, BinaryHeap};
-use std::rc::Rc;
+use std::sync::Arc;
 use specs::{prelude::*, Component, VecStorage};
 
 use action::*;
@@ -17,7 +17,7 @@ pub struct Workspace {
     has_halted: bool,
     world: World,
     now: Instant,
-    globals: HashMap<Rc<str>, Entity>,
+    globals: HashMap<Arc<str>, Entity>,
     flag_map: HashMap<Flag, Vec<Waiting>>,
     task_queue: BinaryHeap<Reverse<QueuedTask>>,
     task_counter: u64,
@@ -57,7 +57,7 @@ pub struct CreationDate(Instant);
 
 #[derive(Clone, Component)]
 #[storage(VecStorage)]
-pub struct Name(Box<str>); // TODO: Arc?
+pub struct Name(Arc<str>);
 
 impl Workspace {
     pub fn new() -> Self {
