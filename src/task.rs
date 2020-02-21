@@ -7,6 +7,11 @@ pub struct QueuedTask {
     pub(crate) action: Action,
 }
 
+pub struct Waiting {
+    pub(crate) counter: u64,
+    pub(crate) action: Action,
+}
+
 impl QueuedTask {
     pub fn new(eta: Instant, action: Action, counter: u64) -> Self {
         QueuedTask {

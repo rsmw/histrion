@@ -1,19 +1,21 @@
 use histrion::Workspace;
 
 #[test]
-fn exec_default() {
-    let mut workspace = Workspace::new();
-
-    workspace.simulate();
-}
-
-#[test]
 fn example_script() {
     use histrion::action::*;
     use histrion::time::*;
 
+    let flag = Flag {
+        head: "arrived".into(),
+        body: vec![].into(),
+    };
+
     let script = Action::Block {
         body: vec![
+            WaitExpr::Flag {
+                head: "arrived".into(),
+                args: vec![].into(),
+            }.and_then(Action::Halt),
             Action::CreateActor { name: "Mars".into(), },
             Action::SetTrajectory {
                 name: "Mars".into(),
@@ -22,7 +24,11 @@ fn example_script() {
                 }.into(),
             },
             WaitExpr::Delay { interval: Interval::from_f64(5.0), }
-                .and_then(Action::Halt),
+                .and_then(Action::Block {
+                    body: vec![
+                        Action::Fulfill { flag },
+                    ].into(),
+                }),
         ].into(),
     };
 

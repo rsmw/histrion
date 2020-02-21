@@ -18,6 +18,7 @@ pub struct Workspace {
     world: World,
     now: Instant,
     globals: HashMap<Rc<str>, Entity>,
+    flag_map: HashMap<Flag, Vec<Waiting>>,
     task_queue: BinaryHeap<Reverse<QueuedTask>>,
     task_counter: u64,
 }
@@ -74,6 +75,7 @@ impl Workspace {
             has_halted: false,
             task_queue: BinaryHeap::new(),
             task_counter: 0,
+            flag_map: HashMap::new(),
         }
     }
 
@@ -88,6 +90,8 @@ impl Workspace {
     }
 
     pub fn perform(&mut self, action: &Action) {
+        eprintln!("{:<8.0}: {}", f64::from(self.now), action.kind());
+
         match action {
             Action::Halt => self.has_halted = true,
 
@@ -132,14 +136,57 @@ impl Workspace {
             },
 
             Action::CreateTask { wait_for, and_then } => {
-                let eta = self.estimate_wait_time(wait_for);
                 let counter = self.task_counter;
                 self.task_counter += 1;
-                self.task_queue.push(Reverse(QueuedTask {
-                    action: and_then.as_ref().clone(),
-                    counter,
-                    eta: self.now + eta,
-                }));
+                let action = and_then.as_ref().clone();
+
+                match wait_for.as_ref().clone() {
+                    WaitExpr::Delay { interval } => {
+                        self.task_queue.push(Reverse(QueuedTask {
+                            action,
+                            counter,
+                            eta: self.now + interval,
+                        }));
+                    },
+
+                    WaitExpr::Flag { head, args } => {
+                        let flag = action::Flag {
+                            head,
+                            body: args.into_iter().map(|arg| match arg {
+                                ArgExpr::NumConst { value } => {
+                                    Scalar::Num((*value).into())
+                                },
+
+                                ArgExpr::ActorName { name } => {
+                                    let &id = self.globals.get(name.as_ref()).unwrap();
+                                    Scalar::ActorId(id)
+                                },
+                            }).collect::<Vec<Scalar>>().into(),
+                        };
+
+                        self.flag_map.entry(flag)
+                            .or_default()
+                            .push(Waiting {
+                                counter,
+                                action
+                            });
+                    },
+                }
+            },
+
+            Action::Fulfill { flag } => {
+                let ready = match self.flag_map.get_mut(&flag) {
+                    Some(ready) => ready,
+                    _ => return,
+                };
+
+                for Waiting { action, counter } in ready.drain(..) {
+                    self.task_queue.push(Reverse(QueuedTask {
+                        eta: self.now,
+                        action,
+                        counter,
+                    }));
+                }
             },
 
             //_ => eprintln!("Not yet implemented: {:?}", action),
@@ -165,12 +212,6 @@ impl Workspace {
                 *pos = func.sample_at(time);
             }
         });
-    }
-
-    fn estimate_wait_time(&self, expr: &WaitExpr) -> Interval {
-        match expr {
-            &WaitExpr::Delay { interval } => interval,
-        }
     }
 }
 
