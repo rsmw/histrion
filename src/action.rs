@@ -9,6 +9,10 @@ use crate::time::Interval;
 pub enum Action {
     Halt,
 
+    Trace {
+        comment: Arc<str>,
+    },
+
     CreateActor {
         name: Arc<str>,
     },
@@ -33,23 +37,6 @@ pub enum Action {
 
     Transmit {
         signal: Signal,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub enum Expr {
-    Var {
-        name: Arc<str>,
-    },
-
-    Field {
-        object: Arc<Expr>,
-        name: Arc<str>,
-    },
-
-    Constant {
-        number: f64,
-        unit: Unit,
     },
 }
 
@@ -99,13 +86,6 @@ pub enum Scalar {
     Num(NotNan<f64>),
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum Unit {
-    Cee,
-    Gee,
-    LightSec,
-}
-
 impl WaitExpr {
     pub fn and_then(self, and_then: impl Into<Arc<Action>>) -> Action {
         let wait_for = self.into();
@@ -121,6 +101,7 @@ impl Action {
     pub fn kind(&self) -> &'static str {
         match self {
             Action::Halt => "halt",
+            Action::Trace { .. } => "trace",
             Action::Block { .. } => "block",
             Action::CreateTask { .. } => "create_task",
             Action::CreateActor { .. } => "create_actor",

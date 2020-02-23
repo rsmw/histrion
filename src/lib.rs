@@ -1,6 +1,7 @@
 pub mod action;
 pub mod time;
 pub mod task;
+pub mod script;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -120,6 +121,10 @@ impl Workspace {
 
         match action {
             Action::Halt => self.has_halted = true,
+
+            Action::Trace { comment } => {
+                eprintln!("\t> {}", comment);
+            },
 
             Action::Block { body } => {
                 for action in body.iter() {
