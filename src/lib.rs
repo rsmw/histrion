@@ -18,7 +18,6 @@ pub struct Workspace {
     now: Instant,
     globals: HashMap<Arc<str>, Entity>,
     implicit_self: Entity,
-    signal_map: HashMap<Signal, Vec<Waiting>>,
     task_counter: u64,
 }
 
@@ -45,9 +44,12 @@ pub enum Trajectory {
     // TODO: ThrustCoast, maybe
 }
 
-#[derive(Component)]
+#[derive(Default, Component)]
 #[storage(VecStorage)]
-pub struct Agenda(Option<QueuedTask>);
+pub struct Agenda {
+     next: Option<QueuedTask>,
+     listening: HashMap<Signal, Waiting>,
+}
 
 /// Current position in space, measured in light-seconds
 #[derive(Copy, Clone, Component)]
@@ -85,7 +87,7 @@ impl Workspace {
 
         let implicit_self = world.create_entity()
             .with(Name(init_name.clone()))
-            .with(Agenda(None))
+            .with(Agenda::default())
             .build();
 
         let mut globals = HashMap::new();
@@ -98,7 +100,6 @@ impl Workspace {
             implicit_self,
             has_halted: false,
             task_counter: 0,
-            signal_map: HashMap::new(),
         }
     }
 
@@ -130,6 +131,7 @@ impl Workspace {
                 let id = self.world.create_entity()
                     .with(Name(name.as_ref().into()))
                     .with(CreationDate(self.now))
+                    .with(Agenda::default())
                     .with(Position::default())
                     .with(Trajectory::default())
                     .build();
@@ -179,11 +181,13 @@ impl Workspace {
                 match wait_for.as_ref().clone() {
                     WaitExpr::Delay { interval } => {
                         self.world.write_component::<Agenda>()
-                            .insert(self.implicit_self, Agenda(Some(QueuedTask {
+                            .get_mut(self.implicit_self)
+                            .expect("Agenda missing")
+                            .next = Some(QueuedTask {
                                 action,
                                 counter,
                                 eta: self.now + interval,
-                            }))).unwrap();
+                            });
                     },
 
                     WaitExpr::Signal { head, args } => {
@@ -201,32 +205,25 @@ impl Workspace {
                             }).collect::<Vec<Scalar>>().into(),
                         };
 
-                        self.signal_map.entry(signal)
-                            .or_default()
-                            .push(Waiting {
-                                counter,
-                                action
-                            });
+                        self.world.write_component::<Agenda>().get_mut(self.implicit_self).unwrap()
+                            .listening.insert(signal, Waiting { counter, action });
                     },
                 }
             },
 
             Action::Transmit { signal } => {
-                eprintln!("TODO: Send {:?}", signal);
-                /*
-                let ready = match self.flag_map.get_mut(&flag) {
-                    Some(ready) => ready,
-                    _ => return Ok(()),
-                };
+                // TODO: Light cone signal delay?
+                let mut agenda = self.world.write_component::<Agenda>();
 
-                for Waiting { action, counter } in ready.drain(..) {
-                    self.task_queue.push(Reverse(QueuedTask {
-                        eta: self.now,
-                        action,
-                        counter,
-                    }));
+                for agenda in (&mut agenda).join() {
+                    if let Some(Waiting { counter, action }) = agenda.listening.remove(signal) {
+                        agenda.next = Some(QueuedTask {
+                            eta: self.now,
+                            counter,
+                            action,
+                        });
+                    }
                 }
-                */
             },
 
             //_ => eprintln!("Not yet implemented: {:?}", action),
@@ -256,7 +253,7 @@ impl Workspace {
         // because the borrow checker got a little confused
         let mut next: Option<(Entity, QueuedTask)> = None;
         for (id, agenda) in (&entities, &agenda).join() {
-            let task = match agenda.0.clone() {
+            let task = match agenda.next.clone() {
                 Some(task) => task,
                 None => continue,
             };
@@ -271,7 +268,7 @@ impl Workspace {
         }
 
         if let Some((id, task)) = next {
-            agenda.remove(id);
+            agenda.get_mut(id).unwrap().next = None;
             self.implicit_self = id;
             return task.into();
         } else {
