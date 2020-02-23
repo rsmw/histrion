@@ -17,18 +17,25 @@ fn example_script() {
                 args: vec![].into(),
             }.and_then(Action::Halt),
             Action::CreateActor { name: "Mars".into(), },
-            Action::SetTrajectory {
+            Action::AsActor {
                 name: "Mars".into(),
-                value: TrajectoryExpr::Linear {
-                    velocity: (1e-3, 0.0, 0.0).into(),
+                action: Action::Block {
+                    body: vec![
+                        Action::SetTrajectory {
+                            value: TrajectoryExpr::Linear {
+                                velocity: (1e-3, 0.0, 0.0).into(),
+                            }.into(),
+                        },
+                        WaitExpr::Delay { interval: Interval::from_f64(5.0), }
+                            .and_then(Action::Block {
+                                body: vec![
+                                    Action::Fulfill { flag },
+                                ].into(),
+                            },
+                        ),
+                    ].into(),
                 }.into(),
             },
-            WaitExpr::Delay { interval: Interval::from_f64(5.0), }
-                .and_then(Action::Block {
-                    body: vec![
-                        Action::Fulfill { flag },
-                    ].into(),
-                }),
         ].into(),
     };
 

@@ -22,8 +22,12 @@ pub enum Action {
         body: Arc<[Action]>,
     },
 
-    SetTrajectory {
+    AsActor {
         name: Arc<str>,
+        action: Arc<Action>,
+    },
+
+    SetTrajectory {
         value: Arc<TrajectoryExpr>,
     },
 
@@ -120,6 +124,7 @@ impl Action {
             Action::Block { .. } => "block",
             Action::CreateTask { .. } => "create_task",
             Action::CreateActor { .. } => "create_actor",
+            Action::AsActor { .. } => "as_actor",
             Action::SetTrajectory { .. } => "set_trajectory",
             Action::Fulfill { .. } => "fulfill",
         }

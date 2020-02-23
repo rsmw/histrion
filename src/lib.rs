@@ -2,8 +2,7 @@ pub mod action;
 pub mod time;
 pub mod task;
 
-use std::cmp::Reverse;
-use std::collections::{HashMap, BinaryHeap};
+use std::collections::HashMap;
 use std::sync::Arc;
 use specs::{prelude::*, Component, VecStorage};
 
@@ -18,8 +17,8 @@ pub struct Workspace {
     world: World,
     now: Instant,
     globals: HashMap<Arc<str>, Entity>,
+    implicit_self: Entity,
     flag_map: HashMap<Flag, Vec<Waiting>>,
-    task_queue: BinaryHeap<Reverse<QueuedTask>>,
     task_counter: u64,
 }
 
@@ -45,6 +44,10 @@ pub enum Trajectory {
 
     // TODO: ThrustCoast, maybe
 }
+
+#[derive(Component)]
+#[storage(VecStorage)]
+pub struct Agenda(Option<QueuedTask>);
 
 /// Current position in space, measured in light-seconds
 #[derive(Copy, Clone, Component)]
@@ -74,15 +77,26 @@ impl Workspace {
 
         world.register::<Position>();
         world.register::<Trajectory>();
+        world.register::<Agenda>();
         world.register::<CreationDate>();
         world.register::<Name>();
+
+        let init_name: Arc<str> = "Everything".into();
+
+        let implicit_self = world.create_entity()
+            .with(Name(init_name.clone()))
+            .with(Agenda(None))
+            .build();
+
+        let mut globals = HashMap::new();
+        globals.insert(init_name, implicit_self);
 
         Workspace {
             now: Instant::default(),
             world,
-            globals: HashMap::new(),
+            globals,
+            implicit_self,
             has_halted: false,
-            task_queue: BinaryHeap::new(),
             task_counter: 0,
             flag_map: HashMap::new(),
         }
@@ -123,10 +137,19 @@ impl Workspace {
                 self.globals.insert(name.clone(), id);
             },
 
-            Action::SetTrajectory { name, value } => {
-                let name = name.clone();
-                let &id = self.globals.get(name.as_ref())
+            Action::AsActor { name, action } => {
+                let previous_self = self.implicit_self;
+                self.implicit_self = *self.globals.get(name.as_ref())
                     .ok_or_else(|| Error::NoSuchGlobal { name: name.clone() })?;
+                self.perform(action.as_ref())?;
+                self.implicit_self = previous_self;
+            },
+
+            Action::SetTrajectory { value } => {
+                let name = self.world.read_component::<Name>()
+                    .get(self.implicit_self)
+                    .expect("Nameless entity")
+                    .0.clone();
 
                 let pos_fn = match value.as_ref() {
                     &TrajectoryExpr::Fixed { value } => {
@@ -137,13 +160,14 @@ impl Workspace {
                     &TrajectoryExpr::Linear { velocity } => {
                         let start_time = self.now;
                         let &start_place = self.world.read_component::<Position>()
-                            .get(id).ok_or(Error::MissingPosition { name: name.clone() })?;
+                            .get(self.implicit_self)
+                            .ok_or(Error::MissingPosition { name: name.clone() })?;
                         Trajectory::Linear { velocity, start_place, start_time }
                     },
                 };
 
                 self.world.write_component::<Trajectory>()
-                    .insert(id, pos_fn)
+                    .insert(self.implicit_self, pos_fn)
                     .map_err(|_err| Error::CouldNotWrite { name: name.clone() })?;
             },
 
@@ -154,11 +178,12 @@ impl Workspace {
 
                 match wait_for.as_ref().clone() {
                     WaitExpr::Delay { interval } => {
-                        self.task_queue.push(Reverse(QueuedTask {
-                            action,
-                            counter,
-                            eta: self.now + interval,
-                        }));
+                        self.world.write_component::<Agenda>()
+                            .insert(self.implicit_self, Agenda(Some(QueuedTask {
+                                action,
+                                counter,
+                                eta: self.now + interval,
+                            }))).unwrap();
                     },
 
                     WaitExpr::Flag { head, args } => {
@@ -187,6 +212,8 @@ impl Workspace {
             },
 
             Action::Fulfill { flag } => {
+                eprintln!("TODO: Fulfill {:?}", flag);
+                /*
                 let ready = match self.flag_map.get_mut(&flag) {
                     Some(ready) => ready,
                     _ => return Ok(()),
@@ -199,6 +226,7 @@ impl Workspace {
                         counter,
                     }));
                 }
+                */
             },
 
             //_ => eprintln!("Not yet implemented: {:?}", action),
@@ -208,14 +236,47 @@ impl Workspace {
     }
 
     pub fn update(&mut self) -> Result<()> {
-        let (time, action) = self.task_queue.pop()
-            .map(|Reverse(task)| task.into())
-            .unwrap_or_else(|| (self.now + Interval::one(), Action::Halt));
+        let (time, action) = self.find_next_task();
 
         assert!(time >= self.now, "Time went backwards");
         self.now = time;
         self.update_positions();
         self.perform(&action)
+    }
+
+    // When tasks were queued globally, we just called pop() on a BinaryHeap.
+    // In order to implement a cancellation policy, tasks are now queued on the
+    // actors that will perform them. Finding the task in question thus becomes
+    // a little bit more complicated: We have to inspect every actor.
+    fn find_next_task(&mut self) -> (Instant, Action) {
+        let entities = self.world.entities();
+        let mut agenda = self.world.write_component::<Agenda>();
+
+        // Expanded from a .filter_map().min_by_key() iterator
+        // because the borrow checker got a little confused
+        let mut next: Option<(Entity, QueuedTask)> = None;
+        for (id, agenda) in (&entities, &agenda).join() {
+            let task = match agenda.0.clone() {
+                Some(task) => task,
+                None => continue,
+            };
+
+            if let Some((_, prev_task)) = next.as_ref() {
+                if prev_task < &task {
+                    continue;
+                }
+            }
+
+            next = Some((id, task));
+        }
+
+        if let Some((id, task)) = next {
+            agenda.remove(id);
+            self.implicit_self = id;
+            return task.into();
+        } else {
+            (self.now + Interval::one(), Action::Halt)
+        }
     }
 
     fn update_positions(&mut self) {

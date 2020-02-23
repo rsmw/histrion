@@ -1,12 +1,14 @@
 use crate::action::Action;
 use crate::time::Instant;
 
+#[derive(Clone)]
 pub struct QueuedTask {
     pub(crate) eta: Instant,
     pub(crate) counter: u64,
     pub(crate) action: Action,
 }
 
+#[derive(Clone)]
 pub struct Waiting {
     pub(crate) counter: u64,
     pub(crate) action: Action,
