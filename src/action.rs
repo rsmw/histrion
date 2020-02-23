@@ -31,8 +31,8 @@ pub enum Action {
         value: Arc<TrajectoryExpr>,
     },
 
-    Fulfill {
-        flag: Flag,
+    Transmit {
+        signal: Signal,
     },
 }
 
@@ -70,7 +70,7 @@ pub enum WaitExpr {
         interval: Interval,
     },
 
-    Flag {
+    Signal {
         head: Arc<str>,
         args: Arc<[ArgExpr]>,
     },
@@ -88,7 +88,7 @@ pub enum ArgExpr {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct Flag {
+pub struct Signal {
     pub head: Arc<str>,
     pub body: Arc<[Scalar]>,
 }
@@ -126,7 +126,7 @@ impl Action {
             Action::CreateActor { .. } => "create_actor",
             Action::AsActor { .. } => "as_actor",
             Action::SetTrajectory { .. } => "set_trajectory",
-            Action::Fulfill { .. } => "fulfill",
+            Action::Transmit { .. } => "transmit",
         }
     }
 }

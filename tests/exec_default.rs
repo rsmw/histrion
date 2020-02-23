@@ -5,14 +5,14 @@ fn example_script() {
     use histrion::action::*;
     use histrion::time::*;
 
-    let flag = Flag {
+    let signal = Signal {
         head: "arrived".into(),
         body: vec![].into(),
     };
 
     let script = Action::Block {
         body: vec![
-            WaitExpr::Flag {
+            WaitExpr::Signal {
                 head: "arrived".into(),
                 args: vec![].into(),
             }.and_then(Action::Halt),
@@ -29,7 +29,7 @@ fn example_script() {
                         WaitExpr::Delay { interval: Interval::from_f64(5.0), }
                             .and_then(Action::Block {
                                 body: vec![
-                                    Action::Fulfill { flag },
+                                    Action::Transmit { signal },
                                 ].into(),
                             },
                         ),

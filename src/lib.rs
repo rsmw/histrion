@@ -18,7 +18,7 @@ pub struct Workspace {
     now: Instant,
     globals: HashMap<Arc<str>, Entity>,
     implicit_self: Entity,
-    flag_map: HashMap<Flag, Vec<Waiting>>,
+    signal_map: HashMap<Signal, Vec<Waiting>>,
     task_counter: u64,
 }
 
@@ -98,7 +98,7 @@ impl Workspace {
             implicit_self,
             has_halted: false,
             task_counter: 0,
-            flag_map: HashMap::new(),
+            signal_map: HashMap::new(),
         }
     }
 
@@ -186,8 +186,8 @@ impl Workspace {
                             }))).unwrap();
                     },
 
-                    WaitExpr::Flag { head, args } => {
-                        let flag = action::Flag {
+                    WaitExpr::Signal { head, args } => {
+                        let signal = action::Signal {
                             head,
                             body: args.into_iter().map(|arg| match arg {
                                 ArgExpr::NumConst { value } => {
@@ -201,7 +201,7 @@ impl Workspace {
                             }).collect::<Vec<Scalar>>().into(),
                         };
 
-                        self.flag_map.entry(flag)
+                        self.signal_map.entry(signal)
                             .or_default()
                             .push(Waiting {
                                 counter,
@@ -211,8 +211,8 @@ impl Workspace {
                 }
             },
 
-            Action::Fulfill { flag } => {
-                eprintln!("TODO: Fulfill {:?}", flag);
+            Action::Transmit { signal } => {
+                eprintln!("TODO: Send {:?}", signal);
                 /*
                 let ready = match self.flag_map.get_mut(&flag) {
                     Some(ready) => ready,
