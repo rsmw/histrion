@@ -23,7 +23,7 @@ pub enum Action {
 
     ListenFor {
         head: Arc<str>,
-        args: Arc<[ArgExpr]>,
+        args: Arc<[Expr]>,
     },
 
     AsActor {
@@ -37,7 +37,12 @@ pub enum Action {
 
     Transmit {
         head: Arc<str>,
-        args: Arc<[ArgExpr]>,
+        args: Arc<[Expr]>,
+    },
+
+    WriteLocal {
+        name: Arc<str>,
+        value: Arc<Expr>,
     },
 }
 
@@ -60,17 +65,17 @@ pub enum WaitExpr {
 
     Signal {
         head: Arc<str>,
-        args: Arc<[ArgExpr]>,
+        args: Arc<[Expr]>,
     },
 }
 
 #[derive(Clone, Debug)]
-pub enum ArgExpr {
+pub enum Expr {
     NumConst {
         value: f64,
     },
 
-    ActorName {
+    Var {
         name: Arc<str>,
     },
 }
@@ -98,6 +103,7 @@ impl Action {
             Action::AsActor { .. } => "as_actor",
             Action::SetTrajectory { .. } => "set_trajectory",
             Action::Transmit { .. } => "transmit",
+            Action::WriteLocal { .. } => "write_local",
         }
     }
 }

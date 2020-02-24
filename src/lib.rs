@@ -207,7 +207,11 @@ impl Workspace {
                 Action::ListenFor { head, args } => {
                     let guid = self.make_guid();
 
-                    let signal = self.eval_signal(head, args)?;
+                    let body = args.iter().map(|arg| {
+                        self.eval_expr(&fiber, arg)
+                    }).collect::<Result<Arc<[Scalar]>>>()?;
+
+                    let signal = Signal { head, body };
 
                     self.world.write_component::<Agenda>().get_mut(fiber.me).unwrap()
                         .listening.insert(signal, Waiting { guid, fiber });
@@ -216,7 +220,11 @@ impl Workspace {
                 },
 
                 Action::Transmit { head, args } => {
-                    let signal = self.eval_signal(head, args)?;
+                    let body = args.iter().map(|arg| {
+                        self.eval_expr(&fiber, arg)
+                    }).collect::<Result<Arc<[Scalar]>>>()?;
+
+                    let signal = Signal { head, body };
 
                     // TODO: Light cone signal delay?
                     let mut agenda = self.world.write_component::<Agenda>();
@@ -228,6 +236,11 @@ impl Workspace {
                             agenda.next = Some(QueuedTask { token, fiber });
                         }
                     }
+                },
+
+                Action::WriteLocal { name, value } => {
+                    let value = self.eval_expr(&fiber, &value)?;
+                    fiber.locals.insert(name, value);
                 },
 
                 //_ => eprintln!("Not yet implemented: {:?}", action),
@@ -253,19 +266,18 @@ impl Workspace {
         guid
     }
 
-    fn eval_signal(&self, head: Arc<str>, args: Arc<[ArgExpr]>) -> Result<Signal> {
-        let body = args.into_iter().map(|arg| match arg {
-            ArgExpr::NumConst { value } => {
+    fn eval_expr(&self, fiber: &Fiber, expr: &Expr) -> Result<Scalar> {
+        Ok(match expr {
+            Expr::Var { name } => {
+                fiber.locals.get(name).map(Clone::clone).or_else(|| {
+                    self.globals.get(name).map(|&id| Scalar::ActorId(id))
+                }).ok_or(Error::NoSuchGlobal { name: name.clone() })?
+            },
+
+            Expr::NumConst { value } => {
                 Scalar::Num((*value).into())
             },
-
-            ArgExpr::ActorName { name } => {
-                let &id = self.globals.get(name.as_ref()).unwrap();
-                Scalar::ActorId(id)
-            },
-        }).collect::<Vec<Scalar>>().into();
-
-        Ok(Signal { head, body })
+        })
     }
 
     // When tasks were queued globally, we just called pop() on a BinaryHeap.

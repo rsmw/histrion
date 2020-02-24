@@ -22,18 +22,22 @@ fn example_script() {
                     }.into(),
                 },
                 Action::Trace {
-                    comment: "Sending #arrived()".into(),
+                    comment: "Sending #arrived(Mars)".into(),
                 },
                 Action::Transmit {
                     head: "arrived".into(),
-                    args: vec![].into(),
+                    args: vec![
+                        Expr::Var { name: "Mars".into() },
+                    ].into(),
                 },
             ].into()
         },
 
         Action::ListenFor {
             head: "arrived".into(),
-            args: vec![].into(),
+            args: vec![
+                Expr::Var { name: "Mars".into() },
+            ].into(),
         },
         Action::Trace {
             comment: "OK, time to halt".into(),
