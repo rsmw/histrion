@@ -112,21 +112,28 @@ impl Default for Script {
                 Action::Spawn {
                     name: "Mars".into(),
                 },
+
+                Action::WriteLocal {
+                    name: "foo".into(),
+                    value: Expr::NumConst {
+                        value: 2.0,
+                    }.into(),
+                },
+
                 Action::AsActor {
                     name: "Mars".into(),
                     script: vec![
-                        Action::Trace {
-                            comment: "Waiting 1 hour...".into(),
-                        },
                         Action::Wait {
                             interval: TimeExpr::Constant {
                                 number: 1.0,
                                 unit: TimeUnit::Hour,
                             }.into(),
                         },
+
                         Action::Trace {
-                            comment: "Sending #arrived(Mars)".into(),
+                            expr: Expr::Var { name: "foo".into(), }.into(),
                         },
+
                         Action::Transmit {
                             head: "arrived".into(),
                             args: vec![
@@ -142,9 +149,7 @@ impl Default for Script {
                         Expr::Var { name: "Mars".into() },
                     ].into(),
                 },
-                Action::Trace {
-                    comment: "OK, time to halt".into(),
-                },
+
                 Action::Halt,
         ].into();
 

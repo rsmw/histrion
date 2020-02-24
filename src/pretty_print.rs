@@ -7,8 +7,8 @@ impl Display for Action {
         match self {
             Action::Halt => write!(f, "halt"),
 
-            Action::Trace { comment } => {
-                write!(f, "trace {:?}", comment)
+            Action::Trace { expr } => {
+                write!(f, "trace {}", expr)
             },
 
             Action::Spawn { name } => {
@@ -35,11 +35,29 @@ impl Display for Action {
                 write!(f, "transmit #{}(...)", head)
             },
 
-            Action::WriteLocal { name, .. } => {
-                write!(f, "{} = ...", name)
+            Action::WriteLocal { name, value } => {
+                write!(f, "{} = {}", name, value)
             },
 
             //_ => write!(f, "UNIMPLEMENTED"),
+        }
+    }
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Expr::NumConst { value } => write!(f, "{}", value),
+            Expr::Var { name } => write!(f, "{}", name),
+        }
+    }
+}
+
+impl Display for Scalar {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Scalar::Num(value) => write!(f, "{}", value),
+            Scalar::ActorId(id) => write!(f, "{:?}", id),
         }
     }
 }

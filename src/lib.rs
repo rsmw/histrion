@@ -133,8 +133,8 @@ impl Workspace {
             match action {
                 Action::Halt => self.has_halted = true,
 
-                Action::Trace { comment } => {
-                    eprintln!("\t> {}", comment);
+                Action::Trace { expr } => {
+                    eprintln!("\t> {} = {}", &expr, self.eval_expr(&fiber, &expr)?);
                 },
 
                 Action::Spawn { name } => {

@@ -10,7 +10,7 @@ pub enum Action {
     Halt,
 
     Trace {
-        comment: Arc<str>,
+        expr: Arc<Expr>,
     },
 
     Spawn {
