@@ -179,20 +179,17 @@ impl Workspace {
             },
 
             Action::CreateTask { wait_for, and_then } => {
-                let counter = self.task_counter;
+                let guid = self.task_counter;
                 self.task_counter += 1;
                 let action = and_then.as_ref().clone();
 
                 match wait_for.as_ref().clone() {
                     WaitExpr::Delay { interval } => {
+                        let token = SortToken { guid, eta: self.now + interval };
                         self.world.write_component::<Agenda>()
                             .get_mut(self.implicit_self)
                             .expect("Agenda missing")
-                            .next = Some(QueuedTask {
-                                action,
-                                counter,
-                                eta: self.now + interval,
-                            });
+                            .next = Some(QueuedTask { action, token });
                     },
 
                     WaitExpr::Signal { head, args } => {
@@ -211,7 +208,7 @@ impl Workspace {
                         };
 
                         self.world.write_component::<Agenda>().get_mut(self.implicit_self).unwrap()
-                            .listening.insert(signal, Waiting { counter, action });
+                            .listening.insert(signal, Waiting { guid, action });
                     },
                 }
             },
@@ -221,12 +218,10 @@ impl Workspace {
                 let mut agenda = self.world.write_component::<Agenda>();
 
                 for agenda in (&mut agenda).join() {
-                    if let Some(Waiting { counter, action }) = agenda.listening.remove(signal) {
-                        agenda.next = Some(QueuedTask {
-                            eta: self.now,
-                            counter,
-                            action,
-                        });
+                    if let Some(Waiting { guid, action }) = agenda.listening.remove(signal) {
+                        let eta = self.now;
+                        let token = SortToken { eta, guid };
+                        agenda.next = Some(QueuedTask { token, action });
                     }
                 }
             },
@@ -256,24 +251,24 @@ impl Workspace {
 
         // Expanded from a .filter_map().min_by_key() iterator
         // because the borrow checker got a little confused
-        let mut next: Option<(Entity, QueuedTask)> = None;
+        let mut next: Option<(Entity, SortToken)> = None;
         for (id, agenda) in (&entities, &agenda).join() {
-            let task = match agenda.next.clone() {
-                Some(task) => task,
+            let token = match agenda.next.clone() {
+                Some(task) => task.token,
                 None => continue,
             };
 
-            if let Some((_, prev_task)) = next.as_ref() {
-                if prev_task < &task {
+            if let Some((_, prev_token)) = next.as_ref() {
+                if prev_token < &token {
                     continue;
                 }
             }
 
-            next = Some((id, task));
+            next = Some((id, token));
         }
 
-        if let Some((id, task)) = next {
-            agenda.get_mut(id).unwrap().next = None;
+        if let Some((id, _token)) = next {
+            let task = agenda.get_mut(id).unwrap().next.take().unwrap();
             self.implicit_self = id;
             return task.into();
         } else {

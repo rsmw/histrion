@@ -1,30 +1,34 @@
 use crate::action::Action;
 use crate::time::Instant;
 
+#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SortToken {
+    pub(crate) eta: Instant,
+    pub(crate) guid: u64,
+}
+
 #[derive(Clone)]
 pub struct QueuedTask {
-    pub(crate) eta: Instant,
-    pub(crate) counter: u64,
+    pub(crate) token: SortToken,
     pub(crate) action: Action,
 }
 
 #[derive(Clone)]
 pub struct Waiting {
-    pub(crate) counter: u64,
+    pub(crate) guid: u64,
     pub(crate) action: Action,
 }
 
 impl QueuedTask {
-    pub fn new(eta: Instant, action: Action, counter: u64) -> Self {
+    pub fn new(token: SortToken, action: Action) -> Self {
         QueuedTask {
-            eta,
-            counter,
+            token,
             action,
         }
     }
 
     pub fn eta(&self) -> Instant {
-        self.eta
+        self.token.eta
     }
 
     pub fn action(&self) -> Action {
@@ -32,30 +36,8 @@ impl QueuedTask {
     }
 }
 
-impl Eq for QueuedTask {
-
-}
-
-impl Ord for QueuedTask {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.eta.cmp(&other.eta).then(self.counter.cmp(&other.counter))
-    }
-}
-
-impl PartialEq for QueuedTask {
-    fn eq(&self, other: &Self) -> bool {
-        self.eta == other.eta && self.counter == other.counter
-    }
-}
-
-impl PartialOrd for QueuedTask {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 impl From<QueuedTask> for (Instant, Action) {
-    fn from(QueuedTask { eta, action, .. }: QueuedTask) -> Self {
-        (eta, action)
+    fn from(task: QueuedTask) -> Self {
+        (task.token.eta, task.action)
     }
 }
