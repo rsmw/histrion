@@ -103,3 +103,51 @@ impl From<AccelUnit> for f64 {
         }
     }
 }
+
+impl Default for Script {
+    fn default() -> Self {
+        use crate::action::Expr;
+
+        let body =  vec![
+                Action::Spawn {
+                    name: "Mars".into(),
+                },
+                Action::AsActor {
+                    name: "Mars".into(),
+                    script: vec![
+                        Action::Trace {
+                            comment: "Waiting 1 hour...".into(),
+                        },
+                        Action::Wait {
+                            interval: TimeExpr::Constant {
+                                number: 1.0,
+                                unit: TimeUnit::Hour,
+                            }.into(),
+                        },
+                        Action::Trace {
+                            comment: "Sending #arrived(Mars)".into(),
+                        },
+                        Action::Transmit {
+                            head: "arrived".into(),
+                            args: vec![
+                                Expr::Var { name: "Mars".into() },
+                            ].into(),
+                        },
+                    ].into()
+                },
+
+                Action::ListenFor {
+                    head: "arrived".into(),
+                    args: vec![
+                        Expr::Var { name: "Mars".into() },
+                    ].into(),
+                },
+                Action::Trace {
+                    comment: "OK, time to halt".into(),
+                },
+                Action::Halt,
+        ].into();
+
+        Script { body }
+    }
+}

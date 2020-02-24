@@ -2,6 +2,7 @@ pub mod action;
 pub mod time;
 pub mod task;
 pub mod script;
+pub mod pretty_print;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -127,7 +128,7 @@ impl Workspace {
 
     fn run(&mut self, mut fiber: Box<Fiber>) -> Result<()> {
         while let Some(action) = fiber.fetch() {
-            eprintln!("{:<8.0}: {}", f64::from(self.now), action.kind());
+            eprintln!("{:<8.0}: {}", f64::from(self.now), action);
 
             match action {
                 Action::Halt => self.has_halted = true,

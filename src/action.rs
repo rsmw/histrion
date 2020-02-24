@@ -58,18 +58,6 @@ pub enum TrajectoryExpr {
 }
 
 #[derive(Clone, Debug)]
-pub enum WaitExpr {
-    Delay {
-        interval: Interval,
-    },
-
-    Signal {
-        head: Arc<str>,
-        args: Arc<[Expr]>,
-    },
-}
-
-#[derive(Clone, Debug)]
 pub enum Expr {
     NumConst {
         value: f64,
@@ -90,20 +78,4 @@ pub struct Signal {
 pub enum Scalar {
     ActorId(specs::Entity),
     Num(NotNan<f64>),
-}
-
-impl Action {
-    pub fn kind(&self) -> &'static str {
-        match self {
-            Action::Halt => "halt",
-            Action::Trace { .. } => "trace",
-            Action::Spawn { .. } => "spawn",
-            Action::Wait { .. } => "wait",
-            Action::ListenFor { .. } => "listen",
-            Action::AsActor { .. } => "as_actor",
-            Action::SetTrajectory { .. } => "set_trajectory",
-            Action::Transmit { .. } => "transmit",
-            Action::WriteLocal { .. } => "write_local",
-        }
-    }
 }
