@@ -1,5 +1,18 @@
-use crate::action::Action;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use specs::Entity;
+
+use crate::action::{Action, Scalar};
 use crate::time::Instant;
+
+#[derive(Clone)]
+pub struct Fiber {
+    pub(crate) me: Entity,
+    pub(crate) pc: usize,
+    pub(crate) script: Arc<[Action]>,
+    pub(crate) locals: HashMap<Arc<str>, Scalar>,
+}
 
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct SortToken {
@@ -10,34 +23,34 @@ pub struct SortToken {
 #[derive(Clone)]
 pub struct QueuedTask {
     pub(crate) token: SortToken,
-    pub(crate) action: Action,
+    pub(crate) fiber: Box<Fiber>,
 }
 
 #[derive(Clone)]
 pub struct Waiting {
     pub(crate) guid: u64,
-    pub(crate) action: Action,
+    pub(crate) fiber: Box<Fiber>,
 }
 
 impl QueuedTask {
-    pub fn new(token: SortToken, action: Action) -> Self {
+    pub fn new(token: SortToken, fiber: Box<Fiber>) -> Self {
         QueuedTask {
             token,
-            action,
+            fiber,
         }
-    }
-
-    pub fn eta(&self) -> Instant {
-        self.token.eta
-    }
-
-    pub fn action(&self) -> Action {
-        self.action.clone()
     }
 }
 
-impl From<QueuedTask> for (Instant, Action) {
+impl From<QueuedTask> for (Instant, Box<Fiber>) {
     fn from(task: QueuedTask) -> Self {
-        (task.token.eta, task.action)
+        (task.token.eta, task.fiber)
+    }
+}
+
+impl Fiber {
+    pub(crate) fn fetch(&mut self) -> Option<Action> {
+        let action = self.script.get(self.pc)?.clone();
+        self.pc += 1;
+        Some(action)
     }
 }

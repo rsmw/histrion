@@ -13,22 +13,22 @@ pub enum Action {
         comment: Arc<str>,
     },
 
-    CreateActor {
+    Spawn {
         name: Arc<str>,
     },
 
-    CreateTask {
-        wait_for: Arc<WaitExpr>,
-        and_then: Arc<Action>,
+    Wait {
+        interval: Interval,
     },
 
-    Block {
-        body: Arc<[Action]>,
+    ListenFor {
+        head: Arc<str>,
+        args: Arc<[ArgExpr]>,
     },
 
     AsActor {
         name: Arc<str>,
-        action: Arc<Action>,
+        script: Arc<[Action]>,
     },
 
     SetTrajectory {
@@ -36,7 +36,8 @@ pub enum Action {
     },
 
     Transmit {
-        signal: Signal,
+        head: Arc<str>,
+        args: Arc<[ArgExpr]>,
     },
 }
 
@@ -86,25 +87,14 @@ pub enum Scalar {
     Num(NotNan<f64>),
 }
 
-impl WaitExpr {
-    pub fn and_then(self, and_then: impl Into<Arc<Action>>) -> Action {
-        let wait_for = self.into();
-        let and_then = and_then.into();
-        Action::CreateTask {
-            wait_for,
-            and_then,
-        }
-    }
-}
-
 impl Action {
     pub fn kind(&self) -> &'static str {
         match self {
             Action::Halt => "halt",
             Action::Trace { .. } => "trace",
-            Action::Block { .. } => "block",
-            Action::CreateTask { .. } => "create_task",
-            Action::CreateActor { .. } => "create_actor",
+            Action::Spawn { .. } => "spawn",
+            Action::Wait { .. } => "wait",
+            Action::ListenFor { .. } => "listen",
             Action::AsActor { .. } => "as_actor",
             Action::SetTrajectory { .. } => "set_trajectory",
             Action::Transmit { .. } => "transmit",

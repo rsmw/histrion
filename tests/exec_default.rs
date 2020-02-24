@@ -2,37 +2,46 @@ use histrion::Workspace;
 
 #[test]
 fn example_script() {
+    use histrion::action::*;
     use histrion::script::*;
 
-    let script = Script::new(vec![
-        Stmt::CreateActor { name: "Mars".into(), },
-        Stmt::AsActor {
+    let script = vec![
+        Action::Spawn {
             name: "Mars".into(),
-            body: vec![
-                Stmt::Wait {
+        },
+        Action::AsActor {
+            name: "Mars".into(),
+            script: vec![
+                Action::Trace {
+                    comment: "Waiting 1 hour...".into(),
+                },
+                Action::Wait {
                     interval: TimeExpr::Constant {
                         number: 1.0,
                         unit: TimeUnit::Hour,
-                    },
+                    }.into(),
                 },
-                Stmt::Transmit {
-                    name: "arrived".into(),
+                Action::Trace {
+                    comment: "Sending #arrived()".into(),
+                },
+                Action::Transmit {
+                    head: "arrived".into(),
                     args: vec![].into(),
                 },
             ].into()
         },
 
-        Stmt::ListenFor {
-            name: "arrived".into(),
+        Action::ListenFor {
+            head: "arrived".into(),
             args: vec![].into(),
         },
-        Stmt::Trace {
+        Action::Trace {
             comment: "OK, time to halt".into(),
         },
-        Stmt::Halt,
-    ].into()).to_action();
+        Action::Halt,
+    ].into();
 
     let mut workspace = Workspace::new();
-    workspace.perform(&script).unwrap();
+    workspace.perform(script).unwrap();
     workspace.simulate().unwrap();
 }

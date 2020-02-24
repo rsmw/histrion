@@ -18,7 +18,7 @@ pub struct Workspace {
     world: World,
     now: Instant,
     globals: HashMap<Arc<str>, Entity>,
-    implicit_self: Entity,
+    supervisor: Entity,
     task_counter: u64,
 }
 
@@ -86,19 +86,19 @@ impl Workspace {
 
         let init_name: Arc<str> = "Everything".into();
 
-        let implicit_self = world.create_entity()
+        let supervisor = world.create_entity()
             .with(Name(init_name.clone()))
             .with(Agenda::default())
             .build();
 
         let mut globals = HashMap::new();
-        globals.insert(init_name, implicit_self);
+        globals.insert(init_name, supervisor);
 
         Workspace {
             now: Instant::default(),
             world,
             globals,
-            implicit_self,
+            supervisor,
             has_halted: false,
             task_counter: 0,
         }
@@ -116,136 +116,163 @@ impl Workspace {
         self.has_halted
     }
 
-    pub fn perform(&mut self, action: &Action) -> Result<()> {
-        eprintln!("{:<8.0}: {}", f64::from(self.now), action.kind());
+    pub fn perform(&mut self, script: Arc<[Action]>) -> Result<()> {
+        self.run(Fiber {
+            me: self.supervisor,
+            pc: 0,
+            locals: HashMap::new(),
+            script,
+        }.into())
+    }
 
-        match action {
-            Action::Halt => self.has_halted = true,
+    fn run(&mut self, mut fiber: Box<Fiber>) -> Result<()> {
+        while let Some(action) = fiber.fetch() {
+            eprintln!("{:<8.0}: {}", f64::from(self.now), action.kind());
 
-            Action::Trace { comment } => {
-                eprintln!("\t> {}", comment);
-            },
+            match action {
+                Action::Halt => self.has_halted = true,
 
-            Action::Block { body } => {
-                for action in body.iter() {
-                    self.perform(action)?;
-                }
-            },
+                Action::Trace { comment } => {
+                    eprintln!("\t> {}", comment);
+                },
 
-            Action::CreateActor { name } => {
-                let id = self.world.create_entity()
-                    .with(Name(name.as_ref().into()))
-                    .with(CreationDate(self.now))
-                    .with(Agenda::default())
-                    .with(Position::default())
-                    .with(Trajectory::default())
-                    .build();
+                Action::Spawn { name } => {
+                    let id = self.world.create_entity()
+                        .with(Name(name.as_ref().into()))
+                        .with(CreationDate(self.now))
+                        .with(Agenda::default())
+                        .with(Position::default())
+                        .with(Trajectory::default())
+                        .build();
 
-                self.globals.insert(name.clone(), id);
-            },
+                    self.globals.insert(name.clone(), id);
+                },
 
-            Action::AsActor { name, action } => {
-                let previous_self = self.implicit_self;
-                self.implicit_self = *self.globals.get(name.as_ref())
-                    .ok_or_else(|| Error::NoSuchGlobal { name: name.clone() })?;
-                self.perform(action.as_ref())?;
-                self.implicit_self = previous_self;
-            },
+                Action::AsActor { name, script } => {
+                    let me = *self.globals.get(name.as_ref())
+                        .ok_or_else(|| Error::NoSuchGlobal { name: name.clone() })?;
 
-            Action::SetTrajectory { value } => {
-                let name = self.world.read_component::<Name>()
-                    .get(self.implicit_self)
-                    .expect("Nameless entity")
-                    .0.clone();
+                    let locals = fiber.locals.clone();
 
-                let pos_fn = match value.as_ref() {
-                    &TrajectoryExpr::Fixed { value } => {
-                        let value = Position(value);
-                        Trajectory::Fixed { value }
-                    },
+                    let fiber = Box::new(Fiber {
+                        me,
+                        pc: 0,
+                        locals,
+                        script,
+                    });
 
-                    &TrajectoryExpr::Linear { velocity } => {
-                        let start_time = self.now;
-                        let &start_place = self.world.read_component::<Position>()
-                            .get(self.implicit_self)
-                            .ok_or(Error::MissingPosition { name: name.clone() })?;
-                        Trajectory::Linear { velocity, start_place, start_time }
-                    },
-                };
+                    self.run(fiber)?;
+                    // Execution resumes where it left off
+                },
 
-                self.world.write_component::<Trajectory>()
-                    .insert(self.implicit_self, pos_fn)
-                    .map_err(|_err| Error::CouldNotWrite { name: name.clone() })?;
-            },
+                Action::SetTrajectory { value } => {
+                    let name = self.world.read_component::<Name>()
+                        .get(fiber.me)
+                        .expect("Nameless entity")
+                        .0.clone();
 
-            Action::CreateTask { wait_for, and_then } => {
-                let guid = self.task_counter;
-                self.task_counter += 1;
-                let action = and_then.as_ref().clone();
+                    let pos_fn = match value.as_ref() {
+                        &TrajectoryExpr::Fixed { value } => {
+                            let value = Position(value);
+                            Trajectory::Fixed { value }
+                        },
 
-                match wait_for.as_ref().clone() {
-                    WaitExpr::Delay { interval } => {
-                        let token = SortToken { guid, eta: self.now + interval };
-                        self.world.write_component::<Agenda>()
-                            .get_mut(self.implicit_self)
-                            .expect("Agenda missing")
-                            .next = Some(QueuedTask { action, token });
-                    },
+                        &TrajectoryExpr::Linear { velocity } => {
+                            let start_time = self.now;
+                            let &start_place = self.world.read_component::<Position>()
+                                .get(fiber.me)
+                                .ok_or(Error::MissingPosition { name: name.clone() })?;
+                            Trajectory::Linear { velocity, start_place, start_time }
+                        },
+                    };
 
-                    WaitExpr::Signal { head, args } => {
-                        let signal = action::Signal {
-                            head,
-                            body: args.into_iter().map(|arg| match arg {
-                                ArgExpr::NumConst { value } => {
-                                    Scalar::Num((*value).into())
-                                },
+                    self.world.write_component::<Trajectory>()
+                        .insert(fiber.me, pos_fn)
+                        .map_err(|_err| Error::CouldNotWrite { name: name.clone() })?;
+                },
 
-                                ArgExpr::ActorName { name } => {
-                                    let &id = self.globals.get(name.as_ref()).unwrap();
-                                    Scalar::ActorId(id)
-                                },
-                            }).collect::<Vec<Scalar>>().into(),
-                        };
+                Action::Wait { interval } => {
+                    let guid = self.make_guid();
+                    let token = SortToken { guid, eta: self.now + interval };
 
-                        self.world.write_component::<Agenda>().get_mut(self.implicit_self).unwrap()
-                            .listening.insert(signal, Waiting { guid, action });
-                    },
-                }
-            },
+                    let me = fiber.me;
+                    self.world.write_component::<Agenda>()
+                        .get_mut(me)
+                        .expect("Agenda missing")
+                        .next = Some(QueuedTask { fiber, token });
 
-            Action::Transmit { signal } => {
-                // TODO: Light cone signal delay?
-                let mut agenda = self.world.write_component::<Agenda>();
+                    break;
+                },
 
-                for agenda in (&mut agenda).join() {
-                    if let Some(Waiting { guid, action }) = agenda.listening.remove(signal) {
-                        let eta = self.now;
-                        let token = SortToken { eta, guid };
-                        agenda.next = Some(QueuedTask { token, action });
+                Action::ListenFor { head, args } => {
+                    let guid = self.make_guid();
+
+                    let signal = self.eval_signal(head, args)?;
+
+                    self.world.write_component::<Agenda>().get_mut(fiber.me).unwrap()
+                        .listening.insert(signal, Waiting { guid, fiber });
+
+                    break;
+                },
+
+                Action::Transmit { head, args } => {
+                    let signal = self.eval_signal(head, args)?;
+
+                    // TODO: Light cone signal delay?
+                    let mut agenda = self.world.write_component::<Agenda>();
+
+                    for agenda in (&mut agenda).join() {
+                        if let Some(Waiting { guid, fiber }) = agenda.listening.remove(&signal) {
+                            let eta = self.now;
+                            let token = SortToken { eta, guid };
+                            agenda.next = Some(QueuedTask { token, fiber });
+                        }
                     }
-                }
-            },
+                },
 
-            //_ => eprintln!("Not yet implemented: {:?}", action),
+                //_ => eprintln!("Not yet implemented: {:?}", action),
+            }
+
         }
 
         Ok(())
     }
 
     pub fn update(&mut self) -> Result<()> {
-        let (time, action) = self.find_next_task();
+        let (time, fiber) = self.find_next_task();
 
         assert!(time >= self.now, "Time went backwards");
         self.now = time;
         self.update_positions();
-        self.perform(&action)
+        self.run(fiber)
+    }
+
+    fn make_guid(&mut self) -> u64 {
+        let guid = self.task_counter;
+        self.task_counter += 1;
+        guid
+    }
+
+    fn eval_signal(&self, head: Arc<str>, args: Arc<[ArgExpr]>) -> Result<Signal> {
+        let body = args.into_iter().map(|arg| match arg {
+            ArgExpr::NumConst { value } => {
+                Scalar::Num((*value).into())
+            },
+
+            ArgExpr::ActorName { name } => {
+                let &id = self.globals.get(name.as_ref()).unwrap();
+                Scalar::ActorId(id)
+            },
+        }).collect::<Vec<Scalar>>().into();
+
+        Ok(Signal { head, body })
     }
 
     // When tasks were queued globally, we just called pop() on a BinaryHeap.
     // In order to implement a cancellation policy, tasks are now queued on the
     // actors that will perform them. Finding the task in question thus becomes
     // a little bit more complicated: We have to inspect every actor.
-    fn find_next_task(&mut self) -> (Instant, Action) {
+    fn find_next_task(&mut self) -> (Instant, Box<Fiber>) {
         let entities = self.world.entities();
         let mut agenda = self.world.write_component::<Agenda>();
 
@@ -269,10 +296,14 @@ impl Workspace {
 
         if let Some((id, _token)) = next {
             let task = agenda.get_mut(id).unwrap().next.take().unwrap();
-            self.implicit_self = id;
             return task.into();
         } else {
-            (self.now + Interval::one(), Action::Halt)
+            (self.now + Interval::one(), Fiber {
+                me: self.supervisor,
+                pc: 0,
+                locals: HashMap::new(),
+                script: vec![Action::Halt].into(),
+            }.into())
         }
     }
 

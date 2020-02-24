@@ -1,53 +1,11 @@
 use std::sync::Arc;
-use std::slice;
 
-use vek::Vec3;
-
-use crate::action::{Action, ArgExpr};
+use crate::action::Action;
 use crate::time::Interval;
 
 #[derive(Clone, Debug)]
 pub struct Script {
-    pub(crate) body: Arc<[Stmt]>,
-}
-
-#[derive(Clone, Debug)]
-pub enum Stmt {
-    Halt,
-
-    Trace {
-        comment: Arc<str>,
-    },
-
-    CreateActor {
-        name: Arc<str>,
-    },
-
-    Wait {
-        interval: TimeExpr,
-    },
-
-    ListenFor {
-        name: Arc<str>,
-        args: Arc<[ArgExpr]>,
-    },
-
-    AsActor {
-        name: Arc<str>,
-        body: Arc<[Stmt]>,
-    },
-
-    MoveTo {
-        target: Vec3<f64>,
-        speed: f64,
-    },
-
-    StopMoving,
-
-    Transmit {
-        name: Arc<str>,
-        args: Arc<[ArgExpr]>,
-    },
+    pub(crate) body: Arc<[Action]>,
 }
 
 #[derive(Clone, Debug)]
@@ -101,95 +59,22 @@ pub enum AtomicExpr {
 }
 
 impl Script {
-    pub fn new(body: Arc<[Stmt]>) -> Self {
+    pub fn new(body: Arc<[Action]>) -> Self {
         Script { body }
     }
 
-    pub fn to_action(&self) -> Action {
-        compile_block(&mut self.body.iter())
+    pub fn into_inner(&self) -> Arc<[Action]> {
+        self.body.clone()
     }
 }
 
-fn compile_block(src: &mut slice::Iter<Stmt>) -> Action {
-    let mut actions = vec![];
-
-    while let Some(stmt) = src.next() {
-        actions.push(match stmt.clone() {
-            Stmt::Halt => {
-                Action::Halt
-            },
-
-            Stmt::Trace { comment } => {
-                Action::Trace { comment }
-            },
-
-            Stmt::CreateActor { name } => {
-                Action::CreateActor { name }
-            },
-
-            Stmt::Wait { interval } => {
-                use crate::action::WaitExpr;
-
-                let interval = compile_interval(&interval);
-
-                Action::CreateTask {
-                    wait_for: WaitExpr::Delay { interval }.into(),
-                    and_then: compile_block(src).into(),
-                }
-            },
-
-            Stmt::ListenFor { name, args } => {
-                use crate::action::WaitExpr;
-
-                Action::CreateTask {
-                    wait_for: WaitExpr::Signal { head: name, args }.into(),
-                    and_then: compile_block(src).into(),
-                }
-            },
-
-            Stmt::AsActor { name, body } => {
-                Action::AsActor {
-                    name,
-                    action: compile_block(&mut body.iter()).into(),
-                }
-            },
-
-            Stmt::MoveTo { .. } => {
-                unimplemented!()
-            },
-
-            Stmt::StopMoving => {
-                use crate::action::TrajectoryExpr;
-
-                Action::SetTrajectory {
-                    value: TrajectoryExpr::Linear {
-                        velocity: (0.0, 0.0, 0.0).into(),
-                    }.into(),
-                }
-            },
-
-            Stmt::Transmit { name, args } => {
-                use crate::action::Signal;
-                Action::Transmit {
-                    signal: Signal {
-                        head: name,
-                        body: args.into_iter().map(|arg| match arg {
-                            _ => unimplemented!(),
-                        }).collect(),
-                    },
-                }
-            },
-        });
-    }
-
-    Action::Block { body: actions.into() }
-}
-
-fn compile_interval(src: &TimeExpr) -> Interval {
-    match *src {
-        TimeExpr::Constant { number, unit } => {
-            Interval::from_f64(number * f64::from(unit))
-        },
+impl From<TimeExpr> for Interval {
+    fn from(src: TimeExpr) -> Self {
+        match src {
+            TimeExpr::Constant { number, unit } => {
+                Interval::from_f64(number * f64::from(unit))
+            }
+        }
     }
 }
 
