@@ -34,8 +34,8 @@ pub enum Trajectory {
     Linear {
         start_place: Position,
         start_time: Instant,
-        /// Measured in light-seconds per second
-        velocity: Vec3<f64>,
+        start_velocity: Vec3<f64>,
+        accel: Vec3<f64>,
     },
 
     // TODO: Orbit, once parent/child entities are implemented
@@ -170,30 +170,33 @@ impl Workspace {
                     // Execution resumes where it left off
                 },
 
-                Action::SetTrajectory { value } => {
+                Action::SetAccel { value } => {
                     let name = self.world.read_component::<Name>()
                         .get(fiber.me)
                         .expect("Nameless entity")
                         .0.clone();
 
-                    let pos_fn = match value.as_ref() {
-                        &TrajectoryExpr::Fixed { value } => {
-                            let value = Position(value);
-                            Trajectory::Fixed { value }
-                        },
+                    let start_time = self.now;
+                    let start_place = self.world.read_component::<Position>()
+                        .get(fiber.me).cloned().unwrap_or_default();
 
-                        &TrajectoryExpr::Linear { velocity } => {
-                            let start_time = self.now;
-                            let &start_place = self.world.read_component::<Position>()
-                                .get(fiber.me)
-                                .ok_or(Error::MissingPosition { name: name.clone() })?;
-                            Trajectory::Linear { velocity, start_place, start_time }
-                        },
+                    let mut storage = self.world.write_component::<Trajectory>();
+
+                    let trajectory = storage.get_mut(fiber.me)
+                        .ok_or_else(|| Error::CouldNotWrite { name: name.clone() })?;
+
+                    let start_velocity = trajectory.velocity_at(self.now);
+
+                    if start_velocity.magnitude_squared() == 0.0 && value.magnitude_squared() == 0.0 {
+                        *trajectory = Trajectory::Fixed { value: start_place };
+                    } else {
+                        *trajectory = Trajectory::Linear {
+                            start_place,
+                            start_time,
+                            start_velocity,
+                            accel: value,
+                        }
                     };
-
-                    self.world.write_component::<Trajectory>()
-                        .insert(fiber.me, pos_fn)
-                        .map_err(|_err| Error::CouldNotWrite { name: name.clone() })?;
                 },
 
                 Action::Wait { interval } => {
@@ -336,6 +339,23 @@ impl Workspace {
 }
 
 impl Trajectory {
+    pub fn velocity_at(&self, time: Instant) -> Vec3<f64> {
+        match *self {
+            Trajectory::Fixed { .. } => Vec3::zero(),
+
+            Trajectory::Linear {
+                start_time,
+                start_velocity,
+                accel,
+                ..
+            } => {
+                let dt = start_time.delta(time);
+                let dv = accel * f64::from(dt).powi(2) * 0.5;
+                start_velocity + dv
+            },
+        }
+    }
+
     pub fn sample_at(&self, time: Instant) -> Position {
         match *self {
             Trajectory::Fixed { value } => value,
@@ -343,9 +363,10 @@ impl Trajectory {
             Trajectory::Linear {
                 start_place,
                 start_time,
-                velocity,
+                ..
             } => {
                 let dt = start_time.delta(time);
+                let velocity = self.velocity_at(time);
                 start_place.offset(velocity * f64::from(dt))
             },
         }

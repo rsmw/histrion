@@ -123,9 +123,20 @@ impl Default for Script {
                 Action::AsActor {
                     name: "Mars".into(),
                     script: vec![
+                        Action::SetAccel { value: (1e-5, 0.0, 0.0).into(), },
+
                         Action::Wait {
                             interval: TimeExpr::Constant {
-                                number: 1.0,
+                                number: 0.5,
+                                unit: TimeUnit::Hour,
+                            }.into(),
+                        },
+
+                        Action::SetAccel { value: (-1e-5, 0.0, 0.0).into(), },
+
+                        Action::Wait {
+                            interval: TimeExpr::Constant {
+                                number: 0.5,
                                 unit: TimeUnit::Hour,
                             }.into(),
                         },

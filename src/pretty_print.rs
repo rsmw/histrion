@@ -30,8 +30,8 @@ impl Display for Action {
                 write!(f, "as {} do ...", name)
             },
 
-            Action::SetTrajectory { .. } => {
-                write!(f, "self.trajectory = ...")
+            Action::SetAccel { .. } => {
+                write!(f, "self.accel = ...")
             },
 
             Action::Transmit { head, args } => {

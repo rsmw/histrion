@@ -31,8 +31,8 @@ pub enum Action {
         script: Arc<[Action]>,
     },
 
-    SetTrajectory {
-        value: Arc<TrajectoryExpr>,
+    SetAccel {
+        value: Vec3<f64>,
     },
 
     Transmit {
@@ -43,17 +43,6 @@ pub enum Action {
     WriteLocal {
         name: Arc<str>,
         value: Arc<Expr>,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub enum TrajectoryExpr {
-    Fixed {
-        value: Vec3<f64>,
-    },
-
-    Linear {
-        velocity: Vec3<f64>,
     },
 }
 
