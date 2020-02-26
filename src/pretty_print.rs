@@ -52,6 +52,8 @@ impl Display for Action {
 impl Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Expr::Myself => write!(f, "self"),
+            Expr::Field { subject, field_name } => write!(f, "{}.{}", subject, field_name),
             Expr::NumConst { value } => write!(f, "{}", value),
             Expr::Var { name } => write!(f, "{}", name),
         }

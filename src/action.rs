@@ -48,6 +48,13 @@ pub enum Action {
 
 #[derive(Clone, Debug)]
 pub enum Expr {
+    Myself,
+
+    Field {
+        subject: Arc<Expr>,
+        field_name: Arc<str>,
+    },
+
     NumConst {
         value: f64,
     },

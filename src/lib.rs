@@ -71,6 +71,7 @@ pub enum Error {
     NoSuchGlobal { name: Arc<str>, },
     MissingPosition { name: Arc<str>, },
     CouldNotWrite { name: Arc<str>, },
+    NoSuchField { name: Arc<str>, on_value: Scalar },
 }
 
 pub type Result<T, E=Error> = std::result::Result<T, E>;
@@ -276,6 +277,26 @@ impl Workspace {
 
     fn eval_expr(&self, fiber: &Fiber, expr: &Expr) -> Result<Scalar> {
         Ok(match expr {
+            Expr::Myself => Scalar::ActorId(fiber.me),
+
+            Expr::Field { subject, field_name } => {
+                match self.eval_expr(fiber, &subject)? {
+                    Scalar::ActorId(id) => match field_name.as_ref() {
+                        "x" => Scalar::Num(self.get_position(id)?.0.x.into()),
+
+                        _ => Err(Error::NoSuchField {
+                            name: field_name.clone(),
+                            on_value: Scalar::ActorId(id),
+                        })?,
+                    },
+
+                    other => Err(Error::NoSuchField {
+                        name: field_name.clone(),
+                        on_value: other,
+                    })?,
+                }
+            },
+
             Expr::Var { name } => {
                 fiber.locals.get(name).map(Clone::clone).or_else(|| {
                     self.globals.get(name).map(|&id| Scalar::ActorId(id))
@@ -286,6 +307,13 @@ impl Workspace {
                 Scalar::Num((*value).into())
             },
         })
+    }
+
+    fn get_position(&self, id: Entity) -> Result<Position> {
+        self.world.read_component::<Position>()
+            .get(id)
+            .cloned()
+            .ok_or(Error::MissingPosition { name: "whatever".into(), })
     }
 
     // When tasks were queued globally, we just called pop() on a BinaryHeap.

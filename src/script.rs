@@ -42,22 +42,6 @@ pub enum AccelUnit {
     Gee,
 }
 
-#[derive(Clone, Debug)]
-pub enum AtomicExpr {
-    Var {
-        name: Arc<str>,
-    },
-
-    Field {
-        object: Arc<AtomicExpr>,
-        name: Arc<str>,
-    },
-
-    Constant {
-        number: f64,
-    },
-}
-
 impl Script {
     pub fn new(body: Arc<[Action]>) -> Self {
         Script { body }
@@ -132,6 +116,10 @@ impl Default for Script {
                             }.into(),
                         },
 
+                        Action::Trace {
+                            expr: Expr::Var { name: "foo".into(), }.into(),
+                        },
+
                         Action::SetAccel { value: (-1e-5, 0.0, 0.0).into(), },
 
                         Action::Wait {
@@ -142,7 +130,10 @@ impl Default for Script {
                         },
 
                         Action::Trace {
-                            expr: Expr::Var { name: "foo".into(), }.into(),
+                            expr: Expr::Field {
+                                subject: Expr::Myself.into(),
+                                field_name: "x".into(),
+                            }.into(),
                         },
 
                         Action::Transmit {
