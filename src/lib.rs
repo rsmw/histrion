@@ -138,12 +138,16 @@ impl Workspace {
                 },
 
                 Action::Spawn { name } => {
+                    let position = self.world.read_component::<Position>()
+                        .get(fiber.me).cloned()
+                        .unwrap_or_default();
+
                     let id = self.world.create_entity()
                         .with(Name(name.as_ref().into()))
                         .with(CreationDate(self.now))
                         .with(Agenda::default())
-                        .with(Position::default())
-                        .with(Trajectory::default())
+                        .with(position)
+                        .with(Trajectory::Fixed { value: position })
                         .build();
 
                     self.globals.insert(name.clone(), id);
