@@ -131,7 +131,10 @@ impl Default for Script {
 
                         Action::Trace {
                             expr: Expr::Field {
-                                subject: Expr::Myself.into(),
+                                subject: Expr::Field {
+                                    subject: Expr::Myself.into(),
+                                    field_name: "position".into(),
+                                }.into(),
                                 field_name: "x".into(),
                             }.into(),
                         },

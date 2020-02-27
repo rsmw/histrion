@@ -4,7 +4,7 @@ pub mod task;
 pub mod script;
 pub mod pretty_print;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use specs::{prelude::*, Component, VecStorage};
 
@@ -71,7 +71,7 @@ pub enum Error {
     NoSuchGlobal { name: Arc<str>, },
     MissingPosition { name: Arc<str>, },
     CouldNotWrite { name: Arc<str>, },
-    NoSuchField { name: Arc<str>, on_value: Scalar },
+    NoSuchField { name: Arc<str>, on_value: Value },
 }
 
 pub type Result<T, E=Error> = std::result::Result<T, E>;
@@ -218,7 +218,7 @@ impl Workspace {
 
                     let body = args.iter().map(|arg| {
                         self.eval_expr(&fiber, arg)
-                    }).collect::<Result<Arc<[Scalar]>>>()?;
+                    }).collect::<Result<Arc<[Value]>>>()?;
 
                     let signal = Signal { head, body };
 
@@ -231,7 +231,7 @@ impl Workspace {
                 Action::Transmit { head, args } => {
                     let body = args.iter().map(|arg| {
                         self.eval_expr(&fiber, arg)
-                    }).collect::<Result<Arc<[Scalar]>>>()?;
+                    }).collect::<Result<Arc<[Value]>>>()?;
 
                     let signal = Signal { head, body };
 
@@ -275,19 +275,28 @@ impl Workspace {
         guid
     }
 
-    fn eval_expr(&self, fiber: &Fiber, expr: &Expr) -> Result<Scalar> {
+    fn eval_expr(&self, fiber: &Fiber, expr: &Expr) -> Result<Value> {
         Ok(match expr {
-            Expr::Myself => Scalar::ActorId(fiber.me),
+            Expr::Myself => Value::ActorId(fiber.me),
 
             Expr::Field { subject, field_name } => {
                 match self.eval_expr(fiber, &subject)? {
-                    Scalar::ActorId(id) => match field_name.as_ref() {
-                        "x" => Scalar::Num(self.get_position(id)?.0.x.into()),
+                    Value::ActorId(id) => match field_name.as_ref() {
+                        "position" => self.get_position(id)?.into(),
 
                         _ => Err(Error::NoSuchField {
                             name: field_name.clone(),
-                            on_value: Scalar::ActorId(id),
+                            on_value: Value::ActorId(id),
                         })?,
+                    },
+
+                    Value::Struct(dict) => {
+                        dict.get(field_name.as_ref()).ok_or_else(|| {
+                            Error::NoSuchField {
+                                name: field_name.clone(),
+                                on_value: Value::Struct(dict.clone()),
+                            }
+                        })?.clone()
                     },
 
                     other => Err(Error::NoSuchField {
@@ -299,12 +308,12 @@ impl Workspace {
 
             Expr::Var { name } => {
                 fiber.locals.get(name).map(Clone::clone).or_else(|| {
-                    self.globals.get(name).map(|&id| Scalar::ActorId(id))
+                    self.globals.get(name).map(|&id| Value::ActorId(id))
                 }).ok_or(Error::NoSuchGlobal { name: name.clone() })?
             },
 
             Expr::NumConst { value } => {
-                Scalar::Num((*value).into())
+                Value::Num((*value).into())
             },
         })
     }
@@ -418,5 +427,17 @@ impl Default for Position {
 impl Position {
     fn offset(self, delta: Vec3<f64>) -> Self {
         Position(self.0 + delta)
+    }
+}
+
+impl From<Position> for Value {
+    fn from(Position(p): Position) -> Self {
+        Value::Struct({
+            let mut dict: BTreeMap<Arc<str>, Value> = Default::default();
+            dict.insert("x".into(), Value::Num(p.x.into()));
+            dict.insert("y".into(), Value::Num(p.y.into()));
+            dict.insert("z".into(), Value::Num(p.z.into()));
+            dict
+        })
     }
 }

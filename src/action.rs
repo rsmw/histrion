@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use ordered_float::NotNan;
@@ -67,11 +68,12 @@ pub enum Expr {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Signal {
     pub head: Arc<str>,
-    pub body: Arc<[Scalar]>,
+    pub body: Arc<[Value]>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum Scalar {
+pub enum Value {
     ActorId(specs::Entity),
     Num(NotNan<f64>),
+    Struct(BTreeMap<Arc<str>, Value>),
 }

@@ -1,5 +1,6 @@
 use std::fmt::{self, Display};
 
+use crate::Position;
 use crate::action::*;
 use crate::script::Script;
 
@@ -30,8 +31,8 @@ impl Display for Action {
                 write!(f, "as {} do ...", name)
             },
 
-            Action::SetAccel { .. } => {
-                write!(f, "self.accel = ...")
+            Action::SetAccel { value } => {
+                write!(f, "self.accel = {}", Value::from(Position(*value)))
             },
 
             Action::Transmit { head, args } => {
@@ -60,11 +61,16 @@ impl Display for Expr {
     }
 }
 
-impl Display for Scalar {
+impl Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Scalar::Num(value) => write!(f, "{}", value),
-            Scalar::ActorId(id) => write!(f, "{:?}", id),
+            Value::Num(value) => write!(f, "{}", value),
+            Value::ActorId(id) => write!(f, "{:?}", id),
+            Value::Struct(fields) => {
+                write!(f, "{{ {} }}", fields.iter().map(|(name, value)| {
+                    format!("{} = {};", name, value)
+                }).collect::<Vec<String>>().join(" "))
+            },
         }
     }
 }

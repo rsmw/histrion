@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use specs::Entity;
 
-use crate::action::{Action, Scalar};
+use crate::action::{Action, Value};
 use crate::time::Instant;
 
 #[derive(Clone)]
@@ -11,7 +11,7 @@ pub struct Fiber {
     pub(crate) me: Entity,
     pub(crate) pc: usize,
     pub(crate) script: Arc<[Action]>,
-    pub(crate) locals: HashMap<Arc<str>, Scalar>,
+    pub(crate) locals: HashMap<Arc<str>, Value>,
 }
 
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
