@@ -50,8 +50,8 @@ pub enum Trajectory {
 #[derive(Default, Component)]
 #[storage(VecStorage)]
 pub struct Agenda {
-     next: Option<QueuedTask>,
-     listening: HashMap<Signal, Waiting>,
+    next: Option<QueuedTask>,
+    listening: HashMap<Signal, Waiting>,
 }
 
 /// Current position in space, measured in light-seconds

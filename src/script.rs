@@ -93,89 +93,89 @@ impl Default for Script {
         use crate::action::*;
 
         let body =  vec![
-                Action::DefGlobalMethod {
-                    name: "trace_foo".into(),
-                    body: Method {
-                        params: vec![
-                            "foo".into(),
-                        ].into(),
-                        script: vec![
-                            Action::Trace {
-                                expr: Expr::Var {
-                                    name: "foo".into(),
-                                }.into(),
-                            },
-                            Action::Return,
-                        ].into(),
-                    }.into(),
-                },
-
-                Action::Spawn {
-                    name: "Mars".into(),
-                },
-
-                Action::WriteLocal {
-                    name: "bar".into(),
-                    value: Expr::NumConst {
-                        value: 2.0,
-                    }.into(),
-                },
-
-                Action::AsActor {
-                    name: "Mars".into(),
-                    script: vec![
-                        Action::SetAccel { value: (1e-5, 0.0, 0.0).into(), },
-
-                        Action::Wait {
-                            interval: TimeExpr::Constant {
-                                number: 0.5,
-                                unit: TimeUnit::Hour,
-                            }.into(),
-                        },
-
-                        Action::Call {
-                            name: "trace_foo".into(),
-                            args: vec![
-                                Expr::Var { name: "bar".into() },
-                            ].into(),
-                        },
-
-                        Action::SetAccel { value: (-1e-5, 0.0, 0.0).into(), },
-
-                        Action::Wait {
-                            interval: TimeExpr::Constant {
-                                number: 0.5,
-                                unit: TimeUnit::Hour,
-                            }.into(),
-                        },
-
-                        Action::Trace {
-                            expr: Expr::Field {
-                                subject: Expr::Field {
-                                    subject: Expr::Myself.into(),
-                                    field_name: "position".into(),
-                                }.into(),
-                                field_name: "x".into(),
-                            }.into(),
-                        },
-
-                        Action::Transmit {
-                            head: "arrived".into(),
-                            args: vec![
-                                Expr::Var { name: "Mars".into() },
-                            ].into(),
-                        },
-                    ].into()
-                },
-
-                Action::ListenFor {
-                    head: "arrived".into(),
-                    args: vec![
-                        Expr::Var { name: "Mars".into() },
+            Action::DefGlobalMethod {
+                name: "trace_foo".into(),
+                body: Method {
+                    params: vec![
+                        "foo".into(),
                     ].into(),
-                },
+                    script: vec![
+                        Action::Trace {
+                            expr: Expr::Var {
+                                name: "foo".into(),
+                            }.into(),
+                        },
+                        Action::Return,
+                    ].into(),
+                }.into(),
+            },
 
-                Action::Halt,
+            Action::Spawn {
+                name: "Mars".into(),
+            },
+
+            Action::WriteLocal {
+                name: "bar".into(),
+                value: Expr::NumConst {
+                    value: 2.0,
+                }.into(),
+            },
+
+            Action::AsActor {
+                name: "Mars".into(),
+                script: vec![
+                    Action::SetAccel { value: (1e-5, 0.0, 0.0).into(), },
+
+                    Action::Wait {
+                        interval: TimeExpr::Constant {
+                            number: 0.5,
+                            unit: TimeUnit::Hour,
+                        }.into(),
+                    },
+
+                    Action::Call {
+                        name: "trace_foo".into(),
+                        args: vec![
+                            Expr::Var { name: "bar".into() },
+                        ].into(),
+                    },
+
+                    Action::SetAccel { value: (-1e-5, 0.0, 0.0).into(), },
+
+                    Action::Wait {
+                        interval: TimeExpr::Constant {
+                            number: 0.5,
+                            unit: TimeUnit::Hour,
+                        }.into(),
+                    },
+
+                    Action::Trace {
+                        expr: Expr::Field {
+                            subject: Expr::Field {
+                                subject: Expr::Myself.into(),
+                                field_name: "position".into(),
+                            }.into(),
+                            field_name: "x".into(),
+                        }.into(),
+                    },
+
+                    Action::Transmit {
+                        head: "arrived".into(),
+                        args: vec![
+                            Expr::Var { name: "Mars".into() },
+                        ].into(),
+                    },
+                ].into()
+            },
+
+            Action::ListenFor {
+                head: "arrived".into(),
+                args: vec![
+                    Expr::Var { name: "Mars".into() },
+                ].into(),
+            },
+
+            Action::Halt,
         ].into();
 
         Script { body }
