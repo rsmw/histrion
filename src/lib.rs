@@ -19,6 +19,7 @@ pub struct Workspace {
     world: World,
     now: Instant,
     globals: HashMap<Arc<str>, Entity>,
+    methods: HashMap<Arc<str>, Arc<Method>>,
     supervisor: Entity,
     task_counter: u64,
 }
@@ -72,6 +73,8 @@ pub enum Error {
     MissingPosition { name: Arc<str>, },
     CouldNotWrite { name: Arc<str>, },
     NoSuchField { name: Arc<str>, on_value: Value },
+    NoSuchMethod { name: Arc<str>, },
+    ArgListMismatch { name: Arc<str>, wanted: usize, got: usize, },
 }
 
 pub type Result<T, E=Error> = std::result::Result<T, E>;
@@ -96,10 +99,13 @@ impl Workspace {
         let mut globals = HashMap::new();
         globals.insert(init_name, supervisor);
 
+        let methods = HashMap::new();
+
         Workspace {
             now: Instant::default(),
             world,
             globals,
+            methods,
             supervisor,
             has_halted: false,
             task_counter: 0,
@@ -119,12 +125,7 @@ impl Workspace {
     }
 
     pub fn perform(&mut self, script: Arc<[Action]>) -> Result<()> {
-        self.run(Fiber {
-            me: self.supervisor,
-            pc: 0,
-            locals: HashMap::new(),
-            script,
-        }.into())
+        self.run(Fiber::new(self.supervisor, script).into())
     }
 
     fn run(&mut self, mut fiber: Box<Fiber>) -> Result<()> {
@@ -155,15 +156,10 @@ impl Workspace {
                     let me = *self.globals.get(name.as_ref())
                         .ok_or_else(|| Error::NoSuchGlobal { name: name.clone() })?;
 
-                    let locals = fiber.locals.clone();
+                    let locals = fiber.frame().unwrap().locals.clone();
 
-                    let fiber = Box::new(Fiber {
-                        me,
-                        pc: 0,
-                        locals,
-                        script,
-                    });
-
+                    let mut fiber = Box::new(Fiber::new(me, script));
+                    fiber.frame_mut().unwrap().locals = locals;
                     self.run(fiber)?;
                     // Execution resumes where it left off
                 },
@@ -245,7 +241,41 @@ impl Workspace {
 
                 Action::WriteLocal { name, value } => {
                     let value = self.eval_expr(&fiber, &value)?;
-                    fiber.locals.insert(name, value);
+                    fiber.frame_mut().unwrap().locals.insert(name, value);
+                },
+
+                Action::DefGlobalMethod { name, body } => {
+                    self.methods.insert(name, body);
+                },
+
+                Action::Call { name, args } => {
+                    let method = self.methods.get(&name).cloned().ok_or_else(|| {
+                        Error::NoSuchMethod { name: name.clone() }
+                    })?;
+
+                    if method.params.len() != args.len() {
+                        return Err(Error::ArgListMismatch {
+                            name: name.clone(),
+                            wanted: method.params.len(),
+                            got: args.len(),
+                        });
+                    }
+
+                    let mut locals = HashMap::new();
+
+                    for (param, arg) in method.params.iter().zip(args.iter()) {
+                        locals.insert(param.clone(), self.eval_expr(&fiber, arg)?);
+                    }
+
+                    fiber.stack.push(StackFrame {
+                        pc: 0,
+                        locals,
+                        script: method.script.clone(),
+                    });
+                },
+
+                Action::Return => {
+                    fiber.stack.pop();
                 },
 
                 //_ => eprintln!("Not yet implemented: {:?}", action),
@@ -303,7 +333,7 @@ impl Workspace {
             },
 
             Expr::Var { name } => {
-                fiber.locals.get(name).map(Clone::clone).or_else(|| {
+                fiber.frame().unwrap().locals.get(name).map(Clone::clone).or_else(|| {
                     self.globals.get(name).map(|&id| Value::ActorId(id))
                 }).ok_or(Error::NoSuchGlobal { name: name.clone() })?
             },
@@ -359,12 +389,10 @@ impl Workspace {
             let task = agenda.get_mut(id).unwrap().next.take().unwrap();
             return task.into();
         } else {
-            (self.now + Interval::one(), Fiber {
-                me: self.supervisor,
-                pc: 0,
-                locals: HashMap::new(),
-                script: vec![Action::Halt].into(),
-            }.into())
+            let eta = self.now + Interval::one();
+            let script = vec![Action::Halt].into();
+            let fiber = Fiber::new(self.supervisor, script).into();
+            (eta, fiber)
         }
     }
 }

@@ -45,6 +45,18 @@ pub enum Action {
         name: Arc<str>,
         value: Arc<Expr>,
     },
+
+    DefGlobalMethod {
+        name: Arc<str>,
+        body: Arc<Method>,
+    },
+
+    Call {
+        name: Arc<str>,
+        args: Arc<[Expr]>,
+    },
+
+    Return,
 }
 
 #[derive(Clone, Debug)]
@@ -76,4 +88,10 @@ pub enum Value {
     ActorId(specs::Entity),
     Num(NotNan<f64>),
     Struct(BTreeMap<Arc<str>, Value>),
+}
+
+#[derive(Clone, Debug)]
+pub struct Method {
+    pub(crate) params: Arc<[Arc<str>]>,
+    pub(crate) script: Arc<[Action]>,
 }

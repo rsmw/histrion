@@ -90,15 +90,32 @@ impl From<AccelUnit> for f64 {
 
 impl Default for Script {
     fn default() -> Self {
-        use crate::action::Expr;
+        use crate::action::*;
 
         let body =  vec![
+                Action::DefGlobalMethod {
+                    name: "trace_foo".into(),
+                    body: Method {
+                        params: vec![
+                            "foo".into(),
+                        ].into(),
+                        script: vec![
+                            Action::Trace {
+                                expr: Expr::Var {
+                                    name: "foo".into(),
+                                }.into(),
+                            },
+                            Action::Return,
+                        ].into(),
+                    }.into(),
+                },
+
                 Action::Spawn {
                     name: "Mars".into(),
                 },
 
                 Action::WriteLocal {
-                    name: "foo".into(),
+                    name: "bar".into(),
                     value: Expr::NumConst {
                         value: 2.0,
                     }.into(),
@@ -116,8 +133,11 @@ impl Default for Script {
                             }.into(),
                         },
 
-                        Action::Trace {
-                            expr: Expr::Var { name: "foo".into(), }.into(),
+                        Action::Call {
+                            name: "trace_foo".into(),
+                            args: vec![
+                                Expr::Var { name: "bar".into() },
+                            ].into(),
                         },
 
                         Action::SetAccel { value: (-1e-5, 0.0, 0.0).into(), },

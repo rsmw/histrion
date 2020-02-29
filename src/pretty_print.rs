@@ -45,6 +45,20 @@ impl Display for Action {
                 write!(f, "{} = {}", name, value)
             },
 
+            Action::DefGlobalMethod { name, .. } => {
+                write!(f, "def {} do ...", name)
+            },
+
+            Action::Call { name, args } => {
+                write!(f, "call {}({})", name, args.iter().map(|arg| {
+                    format!("{}", arg)
+                }).collect::<Vec<_>>().join(", "))
+            },
+
+            Action::Return => {
+                write!(f, "return")
+            }
+
             //_ => write!(f, "UNIMPLEMENTED"),
         }
     }
@@ -115,6 +129,24 @@ impl Printer {
                 self.indent += 1;
 
                 for action in script.iter() {
+                    self.print_action(action);
+                }
+
+                self.indent -= 1;
+                self.write_indent();
+                self.buffer.push_str("done\n");
+            },
+
+            Action::DefGlobalMethod { name, body } => {
+                let params = body.params.iter()
+                    .map(|arg| format!("{}", arg))
+                    .collect::<Vec<String>>().join(", ");
+
+                self.write_indent();
+                self.buffer.push_str(&format!("def {}({}) do", name, params));
+                self.indent += 1;
+
+                for action in body.script.iter() {
                     self.print_action(action);
                 }
 
