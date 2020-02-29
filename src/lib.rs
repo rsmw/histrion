@@ -24,7 +24,7 @@ pub struct Workspace {
 }
 
 /// Trajectory in space, as a function from time to position
-#[derive(Component)]
+#[derive(Copy, Clone, Component)]
 #[storage(VecStorage)]
 pub enum Trajectory {
     Fixed {
@@ -139,15 +139,12 @@ impl Workspace {
                 },
 
                 Action::Spawn { name } => {
-                    let position = self.world.read_component::<Position>()
-                        .get(fiber.me).cloned()
-                        .unwrap_or_default();
+                    let position = self.get_position(fiber.me)?;
 
                     let id = self.world.create_entity()
                         .with(Name(name.as_ref().into()))
                         .with(CreationDate(self.now))
                         .with(Agenda::default())
-                        .with(position)
                         .with(Trajectory::Fixed { value: position })
                         .build();
 
@@ -178,8 +175,7 @@ impl Workspace {
                         .0.clone();
 
                     let start_time = self.now;
-                    let start_place = self.world.read_component::<Position>()
-                        .get(fiber.me).cloned().unwrap_or_default();
+                    let start_place = self.get_position(fiber.me)?;
 
                     let mut storage = self.world.write_component::<Trajectory>();
 
@@ -265,7 +261,7 @@ impl Workspace {
 
         assert!(time >= self.now, "Time went backwards");
         self.now = time;
-        self.update_positions();
+        self.world.write_component::<Position>().clear();
         self.run(fiber)
     }
 
@@ -275,7 +271,7 @@ impl Workspace {
         guid
     }
 
-    fn eval_expr(&self, fiber: &Fiber, expr: &Expr) -> Result<Value> {
+    fn eval_expr(&mut self, fiber: &Fiber, expr: &Expr) -> Result<Value> {
         Ok(match expr {
             Expr::Myself => Value::ActorId(fiber.me),
 
@@ -319,10 +315,18 @@ impl Workspace {
     }
 
     fn get_position(&self, id: Entity) -> Result<Position> {
-        self.world.read_component::<Position>()
-            .get(id)
-            .cloned()
-            .ok_or(Error::MissingPosition { name: "whatever".into(), })
+        let mut positions = self.world.write_component::<Position>();
+        let trajectories = self.world.read_component::<Trajectory>();
+
+        if let Some(position) = positions.get(id).cloned() {
+            return Ok(position);
+        }
+
+        let position = trajectories.get(id).cloned()
+            .unwrap_or_default().sample_at(self.now);
+
+        positions.insert(id, position).unwrap();
+        Ok(position)
     }
 
     // When tasks were queued globally, we just called pop() on a BinaryHeap.
@@ -362,16 +366,6 @@ impl Workspace {
                 script: vec![Action::Halt].into(),
             }.into())
         }
-    }
-
-    fn update_positions(&mut self) {
-        let time = self.now;
-
-        self.world.exec(|(func, mut pos): (ReadStorage<'_, Trajectory>, WriteStorage<'_, Position>)| {
-            for (func, pos) in (&func, &mut pos).join() {
-                *pos = func.sample_at(time);
-            }
-        });
     }
 }
 
