@@ -67,11 +67,18 @@ pub struct CreationDate(Instant);
 #[storage(VecStorage)]
 pub struct Name(Arc<str>);
 
+#[derive(Copy, Clone, Component)]
+#[storage(VecStorage)]
+pub enum Liveness {
+    Alive,
+    Dead,
+}
+
 #[derive(Clone, Debug)]
 pub enum Error {
     NoSuchGlobal { name: Arc<str>, },
     MissingPosition { name: Arc<str>, },
-    CouldNotWrite { name: Arc<str>, },
+    CouldNotWrite { component: &'static str, },
     NoSuchField { name: Arc<str>, on_value: Value },
     NoSuchMethod { name: Arc<str>, },
     ArgListMismatch { name: Arc<str>, wanted: usize, got: usize, },
@@ -87,6 +94,7 @@ impl Workspace {
         world.register::<Trajectory>();
         world.register::<Agenda>();
         world.register::<CreationDate>();
+        world.register::<Liveness>();
         world.register::<Name>();
 
         let init_name: Arc<str> = "Everything".into();
@@ -165,18 +173,13 @@ impl Workspace {
                 },
 
                 Action::SetAccel { value } => {
-                    let name = self.world.read_component::<Name>()
-                        .get(fiber.me)
-                        .expect("Nameless entity")
-                        .0.clone();
-
                     let start_time = self.now;
                     let start_place = self.get_position(fiber.me)?;
 
                     let mut storage = self.world.write_component::<Trajectory>();
 
                     let trajectory = storage.get_mut(fiber.me)
-                        .ok_or_else(|| Error::CouldNotWrite { name: name.clone() })?;
+                        .ok_or_else(|| Error::CouldNotWrite { component: "Trajectory" })?;
 
                     let start_velocity = trajectory.velocity_at(self.now);
 
@@ -237,6 +240,11 @@ impl Workspace {
                             agenda.next = Some(QueuedTask { token, fiber });
                         }
                     }
+                },
+
+                Action::Die => {
+                    self.world.write_component::<Liveness>().insert(fiber.me, Liveness::Dead)
+                    .map_err(|_err| Error::CouldNotWrite { component: "Liveness" })?;
                 },
 
                 Action::WriteLocal { name, value } => {
@@ -461,5 +469,11 @@ impl From<Position> for Value {
             dict.insert("z".into(), Value::Num(p.z.into()));
             dict
         })
+    }
+}
+
+impl Default for Liveness {
+    fn default() -> Self {
+        Liveness::Alive
     }
 }

@@ -41,6 +41,8 @@ pub enum Action {
         args: Arc<[Expr]>,
     },
 
+    Die,
+
     WriteLocal {
         name: Arc<str>,
         value: Arc<Expr>,

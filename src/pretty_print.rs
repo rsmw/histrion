@@ -41,6 +41,10 @@ impl Display for Action {
                 }).collect::<Vec<_>>().join(", "))
             },
 
+            Action::Die => {
+                write!(f, "die")
+            },
+
             Action::WriteLocal { name, value } => {
                 write!(f, "{} = {}", name, value)
             },
