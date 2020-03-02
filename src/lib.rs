@@ -202,7 +202,7 @@ impl Workspace {
                     let me = fiber.me;
                     self.world.write_component::<Agenda>()
                         .get_mut(me)
-                        .expect("Agenda missing")
+                        .ok_or(Error::CouldNotWrite { component: "Agenda" })?
                         .next = Some(QueuedTask { fiber, token });
 
                     break;
@@ -217,7 +217,8 @@ impl Workspace {
 
                     let signal = Signal { head, body };
 
-                    self.world.write_component::<Agenda>().get_mut(fiber.me).unwrap()
+                    self.world.write_component::<Agenda>().get_mut(fiber.me)
+                        .ok_or(Error::CouldNotWrite { component: "Agenda" })?
                         .listening.insert(signal, Waiting { guid, fiber });
 
                     break;
@@ -363,7 +364,8 @@ impl Workspace {
         let position = trajectories.get(id).cloned()
             .unwrap_or_default().sample_at(self.now);
 
-        positions.insert(id, position).unwrap();
+        positions.insert(id, position)
+            .map_err(|_| Error::CouldNotWrite { component: "Position" })?;
         Ok(position)
     }
 
